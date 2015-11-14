@@ -55,7 +55,7 @@ archive ()
 	# compress directly to file
 	#if [ -z "$3" ]; then
 	#	if [[ $btype == "incr" ]] && [ -f "data/$1.lastdate.txt" ]; then
-	#		cond2=("--newer-mtime=" "$(cat "data/$1.lastdate.txt")")
+	#		cond2=("--newer-mtime=$(cat "data/$1.lastdate.txt")")
 	#	fi
 	#	
 	#	tar --exclude-vcs-ignores --exclude-backups --exclude-from "data/$1.exclude.txt" "${cond2[@]}" -cJf "temp/$1..$date.$btype.tar.xz" -C "$2" .
@@ -71,7 +71,7 @@ archive ()
 	# compress and encrypt
 	if [ -z "$3" ]; then
 		if [[ $btype == "incr" ]] && [ -f "data/$1.lastdate.txt" ]; then
-			cond2=("--newer-mtime=" "$(cat "data/$1.lastdate.txt")")
+			cond2=("--newer-mtime=$(cat "data/$1.lastdate.txt")")
 		fi
 		
 		# encrypt with openssl:
