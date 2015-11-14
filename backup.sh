@@ -21,8 +21,10 @@ has_mods ()
 		return 1
 	fi
 	
+	date=$(cat "data/$1.lastdate.txt")
+	
 	IFS=' ' read -a cond <<< "$3"
-	ret=$(( cd "$2"; find . -type f "${cond[@]}" -newermt "$(cat data/$1.lastdate.txt)" ! -name 'desktop.ini' ! -name 'Thumbs.db' -print -quit ) | wc -l)
+	ret=$(( cd "$2"; find . -type f "${cond[@]}" -newermt "$date" ! -name 'desktop.ini' ! -name 'Thumbs.db' -print -quit ) | wc -l)
 	
 	return $ret
 }
@@ -40,27 +42,27 @@ archive ()
 	
 	# compress files
 	
-	# encrypt with openssl:
-	#enc="openssl aes-256-cbc -salt -out \"temp/$1..$date.tar.xz.enc\" -pass env:OPENSSL_PWD"
-	# encrypt with gpg:
-	enc="gpg --encrypt --always-trust --recipient F879E486B30172F92C5C28267646148D0A934BBC --output \"temp/$1..$date.tar.xz.gpg\" -"
-	
-	if [ -z "$enc" ]; then
-		# compress directly to file
-		if [ -z "$3" ]; then
-			tar --exclude-vcs-ignores --exclude-backups --exclude-from "data/$1.exclude.txt" -cJf "temp/$1..$date.tar.xz" -C "$2" .
-		else
-			IFS=' ' read -a cond <<< "$3"
-			( cd "$2"; find . -type f "${cond[@]}" ) | tar --exclude-vcs-ignores --exclude-backups -cJf "temp/$1..$date.tar.xz" -C "$2" --no-recursion --files-from -
-		fi
+	# compress directly to file
+	#if [ -z "$3" ]; then
+	#	tar --exclude-vcs-ignores --exclude-backups --exclude-from "data/$1.exclude.txt" -cJf "temp/$1..$date.tar.xz" -C "$2" .
+	#else
+	#	IFS=' ' read -a cond <<< "$3"
+	#	( cd "$2"; find . -type f "${cond[@]}" ) | tar --exclude-vcs-ignores --exclude-backups -cJf "temp/$1..$date.tar.xz" -C "$2" --no-recursion --files-from -
+	#fi
+	# compress and encrypt
+	if [ -z "$3" ]; then
+		echo no find
+		# encrypt with openssl:
+		#tar --exclude-vcs-ignores --exclude-backups --exclude-from "data/$1.exclude.txt" -cJ -C "$2" . | openssl aes-256-cbc -salt -out "temp/$1..$date.tar.xz.enc" -pass env:OPENSSL_PWD
+		# encrypt with gpg:
+		tar --exclude-vcs-ignores --exclude-backups --exclude-from "data/$1.exclude.txt" -cJ -C "$2" . | gpg --encrypt --always-trust --recipient F879E486B30172F92C5C28267646148D0A934BBC --output "temp/$1..$date.tar.xz.gpg" -
 	else
-		# compress and encrypt
-		if [ -z "$3" ]; then
-			tar --exclude-vcs-ignores --exclude-backups --exclude-from "data/$1.exclude.txt" -cJ -C "$2" . | $enc
-		else
-			IFS=' ' read -a cond <<< "$3"
-			( cd "$2"; find . -type f "${cond[@]}" ) | tar --exclude-vcs-ignores --exclude-backups -cJ -C "$2" --no-recursion --files-from - | $enc
-		fi
+		echo with find
+		IFS=' ' read -a cond <<< "$3"
+		# encrypt with openssl:
+		#( cd "$2"; find . -type f "${cond[@]}" ) | tar --exclude-vcs-ignores --exclude-backups -cJ -C "$2" --no-recursion --files-from - | openssl aes-256-cbc -salt -out "temp/$1..$date.tar.xz.enc" -pass env:OPENSSL_PWD
+		# encrypt with gpg:
+		( cd "$2"; find . -type f "${cond[@]}" ) | tar --exclude-vcs-ignores --exclude-backups -cJ -C "$2" --no-recursion --files-from - | gpg --encrypt --always-trust --recipient F879E486B30172F92C5C28267646148D0A934BBC --output "temp/$1..$date.tar.xz.gpg" -
 	fi
 	
 	# move from temp to folder which contains the files to upload
