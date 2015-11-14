@@ -21,7 +21,13 @@ has_mods ()
 		return 1
 	fi
 	
-	ret=$(find "$2" -type f -newermt "$(cat data/$1.lastdate.txt)" ! -name 'desktop.ini' ! -name 'Thumbs.db' -print -quit | wc -l)
+	if [ -z "$3" ]; then
+		cond="\"$2\""
+	else
+		cond="\"$2\" $3"
+	fi
+	
+	ret=$(find $cond -type f -newermt "$(cat data/$1.lastdate.txt)" ! -name 'desktop.ini' ! -name 'Thumbs.db' -print -quit | wc -l)
 	
 	return $ret
 }
@@ -31,20 +37,34 @@ archive ()
 {
 	date=$(date +"%Y-%m-%d.%H-%M")
 	
-	# generate complementary VCS ignores
+	# generate complementary VCS ignores, if not listing via find
 	
-	php exclude.php "$2" > "data/$1.exclude.txt"
+	if [ -z "$3" ]; then
+		php exclude.php "$2" > "data/$1.exclude.txt"
+	fi
 	
 	# compress files
 	
-	# compress directly to file:
-	#tar --exclude-vcs-ignores --exclude-backups --exclude-from "data/$1.exclude.txt" -cJf "temp/$1..$date.tar.xz" -C "$2" .
+	# encrypt with openssl:
+	#enc="openssl aes-256-cbc -salt -out \"temp/$1..$date.tar.xz.enc\" -pass env:OPENSSL_PWD"
+	# encrypt with gpg:
+	#enc="gpg --encrypt --always-trust --recipient F879E486B30172F92C5C28267646148D0A934BBC --output \"temp/$1..$date.tar.xz.gpg\" -"
 	
-	# compress and encrypt with openssl:
-	#tar --exclude-vcs-ignores --exclude-backups --exclude-from "data/$1.exclude.txt" -cJ -C "$2" . | openssl aes-256-cbc -salt -out "temp/$1..$date.tar.xz.enc" -pass env:OPENSSL_PWD
-	
-	# compress and encrypt with gpg:
-	tar --exclude-vcs-ignores --exclude-backups --exclude-from "data/$1.exclude.txt" -cJ -C "$2" . | gpg --encrypt --always-trust --recipient F879E486B30172F92C5C28267646148D0A934BBC --output "temp/$1..$date.tar.xz.gpg" -
+	if [ -z "$enc" ]; then
+		# compress directly to file
+		if [ -z "$3" ]; then
+			tar --exclude-vcs-ignores --exclude-backups --exclude-from "data/$1.exclude.txt" -cJf "temp/$1..$date.tar.xz" -C "$2" .
+		else
+			find "$2" $3 -type f | tar --exclude-vcs-ignores --exclude-backups -cJf "temp/$1..$date.tar.xz" -C "$2" --no-recursion --files-from -
+		fi
+	else
+		# compress and encrypt
+		if [ -z "$3" ]; then
+			tar --exclude-vcs-ignores --exclude-backups --exclude-from "data/$1.exclude.txt" -cJ -C "$2" . | $enc
+		else
+			find "$2" $3 -type f | tar --exclude-vcs-ignores --exclude-backups -cJ -C "$2" --no-recursion --files-from - | $enc
+		fi
+	fi
 	
 	# move from temp to folder which contains the files to upload
 	
@@ -60,16 +80,18 @@ archive ()
 	
 	# clean up
 	
-	rm -f "data/$1.exclude.txt"
+	if [ -z "$3" ]; then
+		rm -f "data/$1.exclude.txt"
+	fi
 }
 
 # tests whether a backup is needed and performs it
 backup ()
 {
-	has_mods "$1" "$2"
+	has_mods "$1" "$2" "$3"
 	if [ $? -eq 1 ]; then
 		echo $(ts) "backing up $1..."
-		archive "$1" "$2"
+		archive "$1" "$2" "$3"
 	fi
 }
 
@@ -97,6 +119,7 @@ GenericVsProj='(ATL)?Project[0-9]+|(WindowsForms|Console|Wpf|Silverlight|Web)App
 # backup stuff I throw on the desktop
 backup Desktop..euvps /cygdrive/c/Users/RoliSoft/Desktop/euvps
 backup Desktop..cloudflare /cygdrive/c/Users/RoliSoft/Desktop/cloudflare
+backup Desktop..misc /cygdrive/c/Users/RoliSoft/Desktop "-size -50M ! -path './backup/*' ! -path './euvps/*' ! -path './cloudflare/*'"
 
 # backup visual studio projects
 for vsd in /cygdrive/c/Users/RoliSoft/Documents/Visual\ Studio*/Projects; do
