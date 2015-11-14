@@ -6,6 +6,12 @@ error ()
 	echo "$@" 1>&2
 }
 
+# echoes the current time
+ts ()
+{
+	echo -n $(date +"[%Y-%m-%d %H:%M:%S]")
+}
+
 # checks whether the specified directory has had any changes since the last backup
 # retval: indicates change status, where 0 is false, 1 is true
 has_mods ()
@@ -49,7 +55,7 @@ archive ()
 	if [ $? -eq 0 ]; then
 		date --rfc-3339=seconds > "data/$1.lastdate.txt"
 	else
-		error "an error occurred while archiving $1"
+		error $(ts) "an error occurred while archiving $1"
 	fi
 	
 	# clean up
@@ -62,23 +68,41 @@ backup ()
 {
 	has_mods "$1" "$2"
 	if [ $? -eq 1 ]; then
-		echo "backing up $1..."
+		echo $(ts) "backing up $1..."
 		archive "$1" "$2"
 	fi
 }
 
 # traverses a directory full of project folders and treats each one individually
+# parameter 3 is an optional regular expression for skipping projects
 backup_dev ()
 {
 	find "$2" -mindepth 1 -maxdepth 1 -type d | while read -r dir; do
+		if [ ! -z "$3" ] && [[ $(basename "$dir") =~ ^($3)$ ]]; then
+			continue
+		fi
+		
 		name=$(basename "$dir" | tr -dc '[:alnum:]')
 		backup "$1..$name" "$dir"
 	done
 }
 
+# helper stuff
+
+# matches visual studio projects which were created with the default name; these will be skipped
+GenericVsProj='(ATL)?Project[0-9]+|(WindowsForms|Console|Wpf|Silverlight|Web)Application[0-9]+'
+
 # list of backups
 
-backup euvps /cygdrive/c/Users/RoliSoft/Desktop/euvps
-backup_dev VS "/cygdrive/c/Users/RoliSoft/Documents/Visual Studio 2015/Projects"
-backup_dev VS "/cygdrive/c/Users/RoliSoft/Documents/Visual Studio 2012/Projects"
-#backup_dev www "/cygdrive/c/inetpub/wwwroot"
+# backup stuff I throw on the desktop
+backup Desktop..euvps /cygdrive/c/Users/RoliSoft/Desktop/euvps
+backup Desktop..cloudflare /cygdrive/c/Users/RoliSoft/Desktop/cloudflare
+
+# backup visual studio projects
+for vsd in /cygdrive/c/Users/RoliSoft/Documents/Visual\ Studio*/Projects; do
+	backup_dev VisualStudio "$vsd" $GenericVsProj
+done
+
+# backup php projects
+backup WebSites.._nginx /cygdrive/c/inetpub/conf
+backup_dev WebSites /cygdrive/c/inetpub/wwwroot 'seriesprep|jobsite'
