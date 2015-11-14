@@ -24,7 +24,7 @@ has_mods ()
 	date=$(cat "data/$1.lastdate.txt")
 	
 	IFS=' ' read -a cond <<< "$3"
-	ret=$(( cd "$2"; find . -type f "${cond[@]}" -newermt "$date" ! -name 'desktop.ini' ! -name 'Thumbs.db' -print -quit ) | wc -l)
+	ret=$(( cd "$2"; find . -type f "${cond[@]}" -newermt "$date" ! -newermt "now" ! -name 'desktop.ini' ! -name 'Thumbs.db' -print -quit ) | wc -l)
 	
 	return $ret
 }
@@ -51,13 +51,11 @@ archive ()
 	#fi
 	# compress and encrypt
 	if [ -z "$3" ]; then
-		echo no find
 		# encrypt with openssl:
 		#tar --exclude-vcs-ignores --exclude-backups --exclude-from "data/$1.exclude.txt" -cJ -C "$2" . | openssl aes-256-cbc -salt -out "temp/$1..$date.tar.xz.enc" -pass env:OPENSSL_PWD
 		# encrypt with gpg:
 		tar --exclude-vcs-ignores --exclude-backups --exclude-from "data/$1.exclude.txt" -cJ -C "$2" . | gpg --encrypt --always-trust --recipient F879E486B30172F92C5C28267646148D0A934BBC --output "temp/$1..$date.tar.xz.gpg" -
 	else
-		echo with find
 		IFS=' ' read -a cond <<< "$3"
 		# encrypt with openssl:
 		#( cd "$2"; find . -type f "${cond[@]}" ) | tar --exclude-vcs-ignores --exclude-backups -cJ -C "$2" --no-recursion --files-from - | openssl aes-256-cbc -salt -out "temp/$1..$date.tar.xz.enc" -pass env:OPENSSL_PWD
@@ -118,6 +116,7 @@ GenericVsProj='(ATL)?Project[0-9]+|(WindowsForms|Console|Wpf|Silverlight|Web)App
 # backup stuff I throw on the desktop
 backup Desktop..euvps /cygdrive/c/Users/RoliSoft/Desktop/euvps
 backup Desktop..cloudflare /cygdrive/c/Users/RoliSoft/Desktop/cloudflare
+backup Desktop..backup /cygdrive/c/Users/RoliSoft/Desktop/backup
 backup Desktop..misc /cygdrive/c/Users/RoliSoft/Desktop "-size -50M ! -path ./backup* ! -path ./euvps* ! -path ./cloudflare* ! -path ./*-master*"
 
 # backup visual studio projects
