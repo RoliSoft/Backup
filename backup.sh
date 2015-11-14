@@ -12,6 +12,16 @@ ts ()
 	echo -n $(date +"[%Y-%m-%d %H:%M:%S]")
 }
 
+# decide backup type
+btype="full"
+
+if [ ! -z "$1" ] && [[ "$1" == "incr" ]]; then
+	btype="incr"
+	echo $(ts) "incremental backup requested"
+else
+	echo $(ts) "full backup requested"
+fi
+
 # checks whether the specified directory has had any changes since the last backup
 # retval: indicates change status, where 0 is false, 1 is true
 has_mods ()
@@ -44,28 +54,46 @@ archive ()
 	
 	# compress directly to file
 	#if [ -z "$3" ]; then
-	#	tar --exclude-vcs-ignores --exclude-backups --exclude-from "data/$1.exclude.txt" -cJf "temp/$1..$date.tar.xz" -C "$2" .
+	#	if [[ $btype == "incr" ]] && [ -f "data/$1.lastdate.txt" ]; then
+	#		cond2=("--newer-mtime=" "$(cat "data/$1.lastdate.txt")")
+	#	fi
+	#	
+	#	tar --exclude-vcs-ignores --exclude-backups --exclude-from "data/$1.exclude.txt" "${cond2[@]}" -cJf "temp/$1..$date.$btype.tar.xz" -C "$2" .
 	#else
 	#	IFS=' ' read -a cond <<< "$3"
-	#	( cd "$2"; find . -type f "${cond[@]}" ) | tar --exclude-vcs-ignores --exclude-backups -cJf "temp/$1..$date.tar.xz" -C "$2" --no-recursion --files-from -
+	#	
+	#	if [[ $btype == "incr" ]] && [ -f "data/$1.lastdate.txt" ]; then
+	#		cond2=("-newermt" "$(cat "data/$1.lastdate.txt")" "!" "-newermt" "now")
+	#	fi
+	#	
+	#	( cd "$2"; find . -type f "${cond[@]}" "${cond2[@]}" ) | tar --exclude-vcs-ignores --exclude-backups "${cond2[@]}" -cJf "temp/$1..$date.$btype.tar.xz" -C "$2" --no-recursion --files-from -
 	#fi
 	# compress and encrypt
 	if [ -z "$3" ]; then
+		if [[ $btype == "incr" ]] && [ -f "data/$1.lastdate.txt" ]; then
+			cond2=("--newer-mtime=" "$(cat "data/$1.lastdate.txt")")
+		fi
+		
 		# encrypt with openssl:
-		#tar --exclude-vcs-ignores --exclude-backups --exclude-from "data/$1.exclude.txt" -cJ -C "$2" . | openssl aes-256-cbc -salt -out "temp/$1..$date.tar.xz.enc" -pass env:OPENSSL_PWD
+		#tar --exclude-vcs-ignores --exclude-backups --exclude-from "data/$1.exclude.txt" "${cond2[@]}" -cJ -C "$2" . | openssl aes-256-cbc -salt -out "temp/$1..$date.$btype.tar.xz.enc" -pass env:OPENSSL_PWD
 		# encrypt with gpg:
-		tar --exclude-vcs-ignores --exclude-backups --exclude-from "data/$1.exclude.txt" -cJ -C "$2" . | gpg --encrypt --always-trust --recipient F879E486B30172F92C5C28267646148D0A934BBC --output "temp/$1..$date.tar.xz.gpg" -
+		tar --exclude-vcs-ignores --exclude-backups --exclude-from "data/$1.exclude.txt" "${cond2[@]}" -cJ -C "$2" . | gpg --encrypt --always-trust --recipient F879E486B30172F92C5C28267646148D0A934BBC --output "temp/$1..$date.$btype.tar.xz.gpg" -
 	else
 		IFS=' ' read -a cond <<< "$3"
+		
+		if [[ $btype == "incr" ]] && [ -f "data/$1.lastdate.txt" ]; then
+			cond2=("-newermt" "$(cat "data/$1.lastdate.txt")" "!" "-newermt" "now")
+		fi
+		
 		# encrypt with openssl:
-		#( cd "$2"; find . -type f "${cond[@]}" ) | tar --exclude-vcs-ignores --exclude-backups -cJ -C "$2" --no-recursion --files-from - | openssl aes-256-cbc -salt -out "temp/$1..$date.tar.xz.enc" -pass env:OPENSSL_PWD
+		#( cd "$2"; find . -type f "${cond[@]}" "${cond2[@]}" ) | tar --exclude-vcs-ignores --exclude-backups -cJ -C "$2" --no-recursion --files-from - | openssl aes-256-cbc -salt -out "temp/$1..$date.$btype.tar.xz.enc" -pass env:OPENSSL_PWD
 		# encrypt with gpg:
-		( cd "$2"; find . -type f "${cond[@]}" ) | tar --exclude-vcs-ignores --exclude-backups -cJ -C "$2" --no-recursion --files-from - | gpg --encrypt --always-trust --recipient F879E486B30172F92C5C28267646148D0A934BBC --output "temp/$1..$date.tar.xz.gpg" -
+		( cd "$2"; find . -type f "${cond[@]}" "${cond2[@]}" ) | tar --exclude-vcs-ignores --exclude-backups -cJ -C "$2" --no-recursion --files-from - | gpg --encrypt --always-trust --recipient F879E486B30172F92C5C28267646148D0A934BBC --output "temp/$1..$date.$btype.tar.xz.gpg" -
 	fi
 	
 	# move from temp to folder which contains the files to upload
 	
-	mv temp/"$1..$date".tar.xz* "arch/"
+	mv temp/"$1..$date.$btype".tar.xz* "arch/"
 	
 	# set last backup date
 	
