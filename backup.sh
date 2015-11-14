@@ -21,13 +21,8 @@ has_mods ()
 		return 1
 	fi
 	
-	if [ -z "$3" ]; then
-		cond="\"$2\""
-	else
-		cond="\"$2\" $3"
-	fi
-	
-	ret=$(find $cond -type f -newermt "$(cat data/$1.lastdate.txt)" ! -name 'desktop.ini' ! -name 'Thumbs.db' -print -quit | wc -l)
+	IFS=' ' read -a cond <<< "$3"
+	ret=$(( cd "$2"; find . -type f "${cond[@]}" -newermt "$(cat data/$1.lastdate.txt)" ! -name 'desktop.ini' ! -name 'Thumbs.db' -print -quit ) | wc -l)
 	
 	return $ret
 }
@@ -48,21 +43,23 @@ archive ()
 	# encrypt with openssl:
 	#enc="openssl aes-256-cbc -salt -out \"temp/$1..$date.tar.xz.enc\" -pass env:OPENSSL_PWD"
 	# encrypt with gpg:
-	#enc="gpg --encrypt --always-trust --recipient F879E486B30172F92C5C28267646148D0A934BBC --output \"temp/$1..$date.tar.xz.gpg\" -"
+	enc="gpg --encrypt --always-trust --recipient F879E486B30172F92C5C28267646148D0A934BBC --output \"temp/$1..$date.tar.xz.gpg\" -"
 	
 	if [ -z "$enc" ]; then
 		# compress directly to file
 		if [ -z "$3" ]; then
 			tar --exclude-vcs-ignores --exclude-backups --exclude-from "data/$1.exclude.txt" -cJf "temp/$1..$date.tar.xz" -C "$2" .
 		else
-			find "$2" $3 -type f | tar --exclude-vcs-ignores --exclude-backups -cJf "temp/$1..$date.tar.xz" -C "$2" --no-recursion --files-from -
+			IFS=' ' read -a cond <<< "$3"
+			( cd "$2"; find . -type f "${cond[@]}" ) | tar --exclude-vcs-ignores --exclude-backups -cJf "temp/$1..$date.tar.xz" -C "$2" --no-recursion --files-from -
 		fi
 	else
 		# compress and encrypt
 		if [ -z "$3" ]; then
 			tar --exclude-vcs-ignores --exclude-backups --exclude-from "data/$1.exclude.txt" -cJ -C "$2" . | $enc
 		else
-			find "$2" $3 -type f | tar --exclude-vcs-ignores --exclude-backups -cJ -C "$2" --no-recursion --files-from - | $enc
+			IFS=' ' read -a cond <<< "$3"
+			( cd "$2"; find . -type f "${cond[@]}" ) | tar --exclude-vcs-ignores --exclude-backups -cJ -C "$2" --no-recursion --files-from - | $enc
 		fi
 	fi
 	
@@ -119,7 +116,7 @@ GenericVsProj='(ATL)?Project[0-9]+|(WindowsForms|Console|Wpf|Silverlight|Web)App
 # backup stuff I throw on the desktop
 backup Desktop..euvps /cygdrive/c/Users/RoliSoft/Desktop/euvps
 backup Desktop..cloudflare /cygdrive/c/Users/RoliSoft/Desktop/cloudflare
-backup Desktop..misc /cygdrive/c/Users/RoliSoft/Desktop "-size -50M ! -path './backup/*' ! -path './euvps/*' ! -path './cloudflare/*'"
+backup Desktop..misc /cygdrive/c/Users/RoliSoft/Desktop "-size -50M ! -path ./backup* ! -path ./euvps* ! -path ./cloudflare* ! -path ./*-master*"
 
 # backup visual studio projects
 for vsd in /cygdrive/c/Users/RoliSoft/Documents/Visual\ Studio*/Projects; do
@@ -127,5 +124,5 @@ for vsd in /cygdrive/c/Users/RoliSoft/Documents/Visual\ Studio*/Projects; do
 done
 
 # backup php projects
-backup WebSites.._nginx /cygdrive/c/inetpub/conf
+backup WebSites.._nginx /cygdrive/c/inetpub/server/bin/nginx/conf
 backup_dev WebSites /cygdrive/c/inetpub/wwwroot 'seriesprep|jobsite'
