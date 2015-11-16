@@ -47,7 +47,11 @@ archive ()
 	# generate complementary VCS ignores, if not listing via find
 	
 	if [ -z "$3" ]; then
-		php exclude.php "$2" > "data/$1.exclude.txt"
+		if [[ -d "$2/.git" ]]; then
+			( cd "$2"; git ls-files -oi --exclude-standard --directory | awk '{ print "./" $0 }' ) > "data/$1.exclude.txt"
+		else
+			echo > "data/$1.exclude.txt"
+		fi
 	fi
 	
 	# compress files
