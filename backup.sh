@@ -236,7 +236,18 @@ archive ()
 # tests whether a backup is needed and performs it
 backup ()
 {
-	if [ $force -eq 1 ] || [[ $(has_mods "$1" "$2" "$3") -gt 0 ]]; then
+	do=0
+	
+	if [ $force -eq 1 ]; then
+		do=1
+	else
+		has_mods "$1" "$2" "$3"
+		if [ $? -gt 0 ]; then
+			do=1
+		fi
+	fi
+	
+	if [ $do -eq 1 ]; then
 		echo $(ts) "backing up $1..."
 		archive "$1" "$2" "$3"
 	fi
@@ -268,6 +279,7 @@ backup Desktop..euvps /cygdrive/c/Users/RoliSoft/Desktop/euvps
 backup Desktop..cloudflare /cygdrive/c/Users/RoliSoft/Desktop/cloudflare
 backup Desktop..backup /cygdrive/c/Users/RoliSoft/Desktop/backup
 backup Desktop..misc /cygdrive/c/Users/RoliSoft/Desktop "-size -50M ! -path ./backup* ! -path ./euvps* ! -path ./cloudflare* ! -path ./*-master*"
+backup Desktop..home /home
 
 # backup visual studio projects
 for vsd in /cygdrive/c/Users/RoliSoft/Documents/Visual\ Studio*/Projects; do
