@@ -12,15 +12,55 @@ ts ()
 	echo -n $(date +"[%Y-%m-%d %H:%M:%S]")
 }
 
-# decide backup type
-btype="full"
+# global variables
+btype="full" # backup type
+force=0      # force backup regardless of change state
 
-if [ ! -z "$1" ] && [[ "$1" == "incr" ]]; then
-	btype="incr"
-	echo $(ts) "incremental backup requested"
-else
-	echo $(ts) "full backup requested"
-fi
+# read options
+while getopts ":t:fh" opt; do
+	case $opt in
+	t)
+		case $OPTARG in
+			f|full)
+				btype="full"
+			;;
+			i|incr)
+				btype="incr"
+			;;
+			*)
+				error "backup type not supported: $OPTARG"
+				exit 1
+			;;
+		esac
+	;;
+	f)
+		force=1
+	;;
+	h)
+		echo "usage: $0 [-f] [-t f|i]"
+		echo
+		echo "This is more of a DIY backup solution. For more info check the source."
+		exit 0
+	;;
+	\?)
+		error "option not supported: -$OPTARG"
+		exit 1
+	;;
+	:)
+		error "option requires argument: -$OPTARG"
+		exit 1
+	;;
+	esac
+done
+
+case $btype in
+	full)
+		echo $(ts) "full backup requested"
+	;;
+	incr)
+		echo $(ts) "incremental backup requested"
+	;;
+esac
 
 # checks whether the specified directory has had any changes since the last backup
 # retval: indicates change status, where 0 is false, 1 is true
@@ -39,19 +79,24 @@ has_mods ()
 	return $ret
 }
 
+# traverses the specified path and lists all files ignored by git
+gen_git_ignores ()
+{
+	( cd "$1"; find . -type d -name '.git' -print0 ) | while IFS= read -r -d $'\0' dir; do
+		dir=$(echo "$dir" | sed 's/\.git$//')
+		( cd "$1"; cd "$dir"; git ls-files -oi --exclude-standard --directory | awk '{ print "'"$dir"'" $0 }' )
+	done
+}
+
 # archives the specified directory
 archive ()
 {
 	date=$(date +"%Y-%m-%d.%H-%M")
 	
-	# generate complementary VCS ignores, if not listing via find
+	# generate complementary git ignores, if not listing via find
 	
 	if [ -z "$3" ]; then
-		if [[ -d "$2/.git" ]]; then
-			( cd "$2"; git ls-files -oi --exclude-standard --directory | awk '{ print "./" $0 }' ) > "data/$1.exclude.txt"
-		else
-			echo > "data/$1.exclude.txt"
-		fi
+		gen_git_ignores "$2" > "data/$1.exclude.txt"
 	fi
 	
 	# compress files
@@ -118,7 +163,7 @@ archive ()
 backup ()
 {
 	has_mods "$1" "$2" "$3"
-	if [ $? -eq 1 ]; then
+	if [ $? -eq 1 ] || [ $force -eq 1 ]; then
 		echo $(ts) "backing up $1..."
 		archive "$1" "$2" "$3"
 	fi
