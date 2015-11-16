@@ -15,9 +15,13 @@ ts ()
 # global variables
 btype="full" # backup type
 force=0      # force backup regardless of change state
+crypt="gpg"  # encryption type
+
+gpg_keyid="F879E486B30172F92C5C28267646148D0A934BBC" # consult documentation for GPG's --recipient
+openssl_pass="env:OPENSSL_PWD" # consult documentation for OpenSSL's -pass
 
 # read options
-while getopts ":t:fh" opt; do
+while getopts ":t:e:g:o:fh" opt; do
 	case $opt in
 	t)
 		case $OPTARG in
@@ -33,11 +37,34 @@ while getopts ":t:fh" opt; do
 			;;
 		esac
 	;;
+	e)
+		case $OPTARG in
+			n|nop|none)
+				crypt="nop"
+			;;
+			g|gpg|pgp)
+				crypt="gpg"
+			;;
+			o|osl|openssl)
+				crypt="osl"
+			;;
+			*)
+				error "encryption type not supported: $OPTARG"
+				exit 1
+			;;
+		esac
+	;;
+	g)
+		gpg_keyid="$OPTARG"
+	;;
+	o)
+		openssl_pass="$OPTARG"
+	;;
 	f)
 		force=1
 	;;
 	h)
-		echo "usage: $0 [-f] [-t f|i]"
+		echo "usage: $0 [-f] [-t f|i] [-e n|g|o] [-g recipient] [-o password]"
 		echo
 		echo "This is more of a DIY backup solution. For more info check the source."
 		exit 0
@@ -59,6 +86,18 @@ case $btype in
 	;;
 	incr)
 		echo $(ts) "incremental backup requested"
+	;;
+esac
+
+case $crypt in
+	nop)
+		echo $(ts) "not encrypting backups"
+	;;
+	gpg)
+		echo $(ts) "encrypting backups with GPG"
+	;;
+	osl)
+		echo $(ts) "encrypting backups with OpenSSL"
 	;;
 esac
 
@@ -84,7 +123,7 @@ gen_git_ignores ()
 {
 	( cd "$1"; find . -type d -name '.git' -print0 ) | while IFS= read -r -d $'\0' dir; do
 		dir=$(echo "$dir" | sed 's/\.git$//')
-		( cd "$1"; cd "$dir"; git ls-files -oi --exclude-standard --directory | awk '{ print "'"$dir"'" $0 }' )
+		( cd "$1"; cd "$dir"; git ls-files -oi --exclude-standard --directory | awk '{ print "'"$dir"'" $0 }' | sed 's/\/$/\/*/' )
 	done
 }
 
@@ -101,43 +140,57 @@ archive ()
 	
 	# compress files
 	
-	# compress directly to file
-	#if [ -z "$3" ]; then
-	#	if [[ $btype == "incr" ]] && [ -f "data/$1.lastdate.txt" ]; then
-	#		cond2=("--newer-mtime=$(cat "data/$1.lastdate.txt")")
-	#	fi
-	#	
-	#	tar --exclude-vcs-ignores --exclude-backups --exclude-from "data/$1.exclude.txt" "${cond2[@]}" -cJf "temp/$1..$date.$btype.tar.xz" -C "$2" .
-	#else
-	#	IFS=' ' read -a cond <<< "$3"
-	#	
-	#	if [[ $btype == "incr" ]] && [ -f "data/$1.lastdate.txt" ]; then
-	#		cond2=("-newermt" "$(cat "data/$1.lastdate.txt")" "!" "-newermt" "now")
-	#	fi
-	#	
-	#	( cd "$2"; find . -type f "${cond[@]}" "${cond2[@]}" ) | tar --exclude-vcs-ignores --exclude-backups "${cond2[@]}" -cJf "temp/$1..$date.$btype.tar.xz" -C "$2" --no-recursion --files-from -
-	#fi
-	# compress and encrypt
 	if [ -z "$3" ]; then
+		# using tar to list files
+		
 		if [[ $btype == "incr" ]] && [ -f "data/$1.lastdate.txt" ]; then
 			cond2=("--newer-mtime=$(cat "data/$1.lastdate.txt")")
 		fi
 		
-		# encrypt with openssl:
-		#tar --exclude-vcs-ignores --exclude-backups --exclude-from "data/$1.exclude.txt" "${cond2[@]}" -cJ -C "$2" . | openssl aes-256-cbc -salt -out "temp/$1..$date.$btype.tar.xz.enc" -pass env:OPENSSL_PWD
-		# encrypt with gpg:
-		tar --exclude-vcs-ignores --exclude-backups --exclude-from "data/$1.exclude.txt" "${cond2[@]}" -cJ -C "$2" . | gpg --encrypt --always-trust --recipient F879E486B30172F92C5C28267646148D0A934BBC --output "temp/$1..$date.$btype.tar.xz.gpg" -
+		case $crypt in
+			nop)
+				# no encryption
+				tar --ignore-failed-read --exclude-vcs-ignores --exclude-backups --exclude-from "data/$1.exclude.txt" "${cond2[@]}" -cJf "temp/$1..$date.$btype.tar.xz" -C "$2" .
+			;;
+			gpg)
+				# encrypt with gpg
+				tar --ignore-failed-read --exclude-vcs-ignores --exclude-backups --exclude-from "data/$1.exclude.txt" "${cond2[@]}" -cJ -C "$2" . | \
+				gpg --encrypt --always-trust --recipient "$gpg_keyid" --output "temp/$1..$date.$btype.tar.xz.gpg" -
+			;;
+			osl)
+				# encrypt with openssl
+				tar --ignore-failed-read --exclude-vcs-ignores --exclude-backups --exclude-from "data/$1.exclude.txt" "${cond2[@]}" -cJ -C "$2" . | \
+				openssl aes-256-cbc -salt -out "temp/$1..$date.$btype.tar.xz.enc" -pass "$openssl_pass"
+			;;
+		esac
 	else
+		# using find to send file list to tar
+		
 		IFS=' ' read -a cond <<< "$3"
 		
 		if [[ $btype == "incr" ]] && [ -f "data/$1.lastdate.txt" ]; then
 			cond2=("-newermt" "$(cat "data/$1.lastdate.txt")" "!" "-newermt" "now")
 		fi
 		
-		# encrypt with openssl:
-		#( cd "$2"; find . -type f "${cond[@]}" "${cond2[@]}" ) | tar --exclude-vcs-ignores --exclude-backups -cJ -C "$2" --no-recursion --files-from - | openssl aes-256-cbc -salt -out "temp/$1..$date.$btype.tar.xz.enc" -pass env:OPENSSL_PWD
-		# encrypt with gpg:
-		( cd "$2"; find . -type f "${cond[@]}" "${cond2[@]}" ) | tar --exclude-vcs-ignores --exclude-backups -cJ -C "$2" --no-recursion --files-from - | gpg --encrypt --always-trust --recipient F879E486B30172F92C5C28267646148D0A934BBC --output "temp/$1..$date.$btype.tar.xz.gpg" -
+		case $crypt in
+			nop)
+				# no encryption
+				( cd "$2"; find . -type f "${cond[@]}" "${cond2[@]}" ) | \
+				tar --ignore-failed-read --exclude-vcs-ignores --exclude-backups "${cond2[@]}" -cJf "temp/$1..$date.$btype.tar.xz" -C "$2" --no-recursion --files-from -
+			;;
+			gpg)
+				# encrypt with gpg
+				( cd "$2"; find . -type f "${cond[@]}" "${cond2[@]}" ) | \
+				tar --ignore-failed-read --exclude-vcs-ignores --exclude-backups -cJ -C "$2" --no-recursion --files-from - | \
+				gpg --encrypt --always-trust --recipient "$gpg_keyid" --output "temp/$1..$date.$btype.tar.xz.gpg" -
+			;;
+			osl)
+				# encrypt with openssl
+				( cd "$2"; find . -type f "${cond[@]}" "${cond2[@]}" ) | \
+				tar --ignore-failed-read --exclude-vcs-ignores --exclude-backups -cJ -C "$2" --no-recursion --files-from - | \
+				openssl aes-256-cbc -salt -out "temp/$1..$date.$btype.tar.xz.enc" -pass "$openssl_pass"
+			;;
+		esac
 	fi
 	
 	# move from temp to folder which contains the files to upload
@@ -191,16 +244,16 @@ GenericVsProj='(ATL)?Project[0-9]+|(WindowsForms|Console|Wpf|Silverlight|Web)App
 # list of backups
 
 # backup stuff I throw on the desktop
-backup Desktop..euvps /cygdrive/c/Users/RoliSoft/Desktop/euvps
-backup Desktop..cloudflare /cygdrive/c/Users/RoliSoft/Desktop/cloudflare
+#backup Desktop..euvps /cygdrive/c/Users/RoliSoft/Desktop/euvps
+#backup Desktop..cloudflare /cygdrive/c/Users/RoliSoft/Desktop/cloudflare
 backup Desktop..backup /cygdrive/c/Users/RoliSoft/Desktop/backup
-backup Desktop..misc /cygdrive/c/Users/RoliSoft/Desktop "-size -50M ! -path ./backup* ! -path ./euvps* ! -path ./cloudflare* ! -path ./*-master*"
+#backup Desktop..misc /cygdrive/c/Users/RoliSoft/Desktop "-size -50M ! -path ./backup* ! -path ./euvps* ! -path ./cloudflare* ! -path ./*-master*"
 
 # backup visual studio projects
-for vsd in /cygdrive/c/Users/RoliSoft/Documents/Visual\ Studio*/Projects; do
-	backup_dev VisualStudio "$vsd" $GenericVsProj
-done
+#for vsd in /cygdrive/c/Users/RoliSoft/Documents/Visual\ Studio*/Projects; do
+#	backup_dev VisualStudio "$vsd" $GenericVsProj
+#done
 
 # backup php projects
-backup WebSites.._nginx /cygdrive/c/inetpub/server/bin/nginx/conf
-backup_dev WebSites /cygdrive/c/inetpub/wwwroot 'seriesprep|jobsite'
+#backup WebSites.._nginx /cygdrive/c/inetpub/server/bin/nginx/conf
+#backup_dev WebSites /cygdrive/c/inetpub/wwwroot 'seriesprep|jobsite'
