@@ -80,26 +80,34 @@ while getopts ":t:e:g:o:fh" opt; do
 	esac
 done
 
+# print run info
+
+echo -n $(ts) "backup type: "
+
 case $btype in
 	full)
-		echo $(ts) "full backup requested"
+		echo -n "full"
 	;;
 	incr)
-		echo $(ts) "incremental backup requested"
+		echo -n "incremental"
 	;;
 esac
 
+echo -n "; encryption: "
+
 case $crypt in
 	nop)
-		echo $(ts) "not encrypting backups"
+		echo -n "none"
 	;;
 	gpg)
-		echo $(ts) "encrypting backups with GPG"
+		echo -n "GPG"
 	;;
 	osl)
-		echo $(ts) "encrypting backups with OpenSSL"
+		echo -n "OpenSSL"
 	;;
 esac
+
+echo
 
 # checks whether the specified directory has had any changes since the last backup
 # retval: indicates change status, where 0 is false, 1 is true
@@ -110,10 +118,28 @@ has_mods ()
 		return 1
 	fi
 	
+	# read last backup date
 	date=$(cat "data/$1.lastdate.txt")
 	
-	IFS=' ' read -a cond <<< "$3"
-	ret=$(( cd "$2"; find . -type f "${cond[@]}" -newermt "$date" ! -newermt "now" ! -name 'desktop.ini' ! -name 'Thumbs.db' -print -quit ) | wc -l)
+	if [ -z "$3" ]; then
+		# generate complementary git ignores, if not backing up through find
+		gen_git_ignores "$2" 0 > "data/$1.exclude.txt"
+	else
+		# parse find conditions into an array
+		IFS=' ' read -a cond <<< "$3"
+	fi
+	
+	ret=$(\
+			( cd "$2"; find . -type f "${cond[@]}" -newermt "$date" ! -newermt "now" ! -name 'desktop.ini' ! -name 'Thumbs.db' -print ) | \
+			( [[ -z "$3" ]] && grep -vFf "data/$1.exclude.txt" || cat ) | \
+			wc -l \
+		)
+	
+	# clean up
+	
+	if [ -z "$3" ]; then
+		rm -f "data/$1.exclude.txt"
+	fi
 	
 	return $ret
 }
@@ -123,7 +149,12 @@ gen_git_ignores ()
 {
 	( cd "$1"; find . -type d -name '.git' -print0 ) | while IFS= read -r -d $'\0' dir; do
 		dir=$(echo "$dir" | sed 's/\.git$//')
-		( cd "$1"; cd "$dir"; git ls-files -oi --exclude-standard --directory | awk '{ print "'"$dir"'" $0 }' | sed 's/\/$/\/*/' )
+		(\
+			cd "$1"; cd "$dir"; \
+			git ls-files -oi --exclude-standard --directory | \
+			awk '{ print "'"$dir"'" $0 }' | \
+			( [[ $2 -eq 1 ]] && sed 's/\/$/\/*/' || cat ) \
+		)
 	done
 }
 
@@ -135,7 +166,7 @@ archive ()
 	# generate complementary git ignores, if not listing via find
 	
 	if [ -z "$3" ]; then
-		gen_git_ignores "$2" > "data/$1.exclude.txt"
+		gen_git_ignores "$2" 1 > "data/$1.exclude.txt"
 	fi
 	
 	# compress files
