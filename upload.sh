@@ -2,6 +2,22 @@
 
 . funcs.sh
 
+# check if running under cygwin and modify symbolic linking behaviour
+
+sl=1
+
+if [[ $(uname -s) =~ CYGWIN ]]; then
+	# check if user is admin
+	if id -G | grep -qE '\<(544|0)\>'; then
+		# use native NTFS symlinks
+		export CYGWIN="winsymlinks:native"
+	else
+		# NTFS symlinks can only be created by admins
+		sl=0
+		error $(ts) "you are running Cygwin without admin rights: symlinking will not be used"
+	fi
+fi
+
 # enumerate backups ready to upload
 
 find "arch" -mindepth 1 -maxdepth 1 -type f | sed 's/^arch\///' | while read -r file; do
@@ -9,11 +25,13 @@ find "arch" -mindepth 1 -maxdepth 1 -type f | sed 's/^arch\///' | while read -r 
 	
 	name=$(echo "$file" | sed 's/\.\./\//g' | sed 's/^arch\///')
 	dstdir=${name%/*}
-	name=${name##*/}
 	
 	# create symlink with new name, since most tools don't allow to specify a new name
 	
-	ln -f -s "arch/$file" "arch/$name"
+	if [ $sl -eq 1 ]; then
+		name=${name##*/}
+		ln -f -s "arch/$file" "arch/$name"
+	fi
 	
 	# upload to google
 	
