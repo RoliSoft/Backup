@@ -236,8 +236,7 @@ archive ()
 # tests whether a backup is needed and performs it
 backup ()
 {
-	has_mods "$1" "$2" "$3"
-	if [ $? -gt 0 ] || [ $force -eq 1 ]; then
+	if [ $force -eq 1 ] || [[ $(has_mods "$1" "$2" "$3") -gt 0 ]]; then
 		echo $(ts) "backing up $1..."
 		archive "$1" "$2" "$3"
 	fi
