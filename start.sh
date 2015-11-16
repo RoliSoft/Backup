@@ -1,9 +1,6 @@
 #!/bin/bash
 
-ts ()
-{
-	echo -n $(date +"[%Y-%m-%d %H:%M:%S]")
-}
+. funcs.sh
 
 # check for remnants
 

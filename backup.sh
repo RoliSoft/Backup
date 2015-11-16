@@ -1,16 +1,6 @@
 #!/bin/bash
 
-# prints an error to stderr
-error ()
-{
-	echo "$@" 1>&2
-}
-
-# echoes the current time
-ts ()
-{
-	echo -n $(date +"[%Y-%m-%d %H:%M:%S]")
-}
+. funcs.sh
 
 # global variables
 btype="full" # backup type
@@ -247,7 +237,7 @@ archive ()
 backup ()
 {
 	has_mods "$1" "$2" "$3"
-	if [ $? -eq 1 ] || [ $force -eq 1 ]; then
+	if [ $? -gt 0 ] || [ $force -eq 1 ]; then
 		echo $(ts) "backing up $1..."
 		archive "$1" "$2" "$3"
 	fi
