@@ -151,7 +151,7 @@ gen_git_ignores ()
 # archives the specified directory
 archive ()
 {
-	date=$(date +"%Y-%m-%d.%H-%M")
+	date=$(date +"%Y-%m-%d_%H-%M")
 	
 	# generate complementary git ignores, if not listing via find
 	
@@ -265,16 +265,16 @@ GenericVsProj='(ATL)?Project[0-9]+|(WindowsForms|Console|Wpf|Silverlight|Web)App
 # list of backups
 
 # backup stuff I throw on the desktop
-#backup Desktop..euvps /cygdrive/c/Users/RoliSoft/Desktop/euvps
-#backup Desktop..cloudflare /cygdrive/c/Users/RoliSoft/Desktop/cloudflare
+backup Desktop..euvps /cygdrive/c/Users/RoliSoft/Desktop/euvps
+backup Desktop..cloudflare /cygdrive/c/Users/RoliSoft/Desktop/cloudflare
 backup Desktop..backup /cygdrive/c/Users/RoliSoft/Desktop/backup
-#backup Desktop..misc /cygdrive/c/Users/RoliSoft/Desktop "-size -50M ! -path ./backup* ! -path ./euvps* ! -path ./cloudflare* ! -path ./*-master*"
+backup Desktop..misc /cygdrive/c/Users/RoliSoft/Desktop "-size -50M ! -path ./backup* ! -path ./euvps* ! -path ./cloudflare* ! -path ./*-master*"
 
 # backup visual studio projects
-#for vsd in /cygdrive/c/Users/RoliSoft/Documents/Visual\ Studio*/Projects; do
-#	backup_dev VisualStudio "$vsd" $GenericVsProj
-#done
+for vsd in /cygdrive/c/Users/RoliSoft/Documents/Visual\ Studio*/Projects; do
+	backup_dev VisualStudio "$vsd" $GenericVsProj
+done
 
 # backup php projects
-#backup WebSites.._nginx /cygdrive/c/inetpub/server/bin/nginx/conf
-#backup_dev WebSites /cygdrive/c/inetpub/wwwroot 'seriesprep|jobsite'
+backup WebSites.._nginx /cygdrive/c/inetpub/server/bin/nginx/conf
+backup_dev WebSites /cygdrive/c/inetpub/wwwroot 'seriesprep|jobsite'
