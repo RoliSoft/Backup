@@ -12,7 +12,7 @@ fi
 # start backup
 
 echo $(ts) "starting backup process"
-./backup.sh
+./backup.sh $@
 
 # start upload
 

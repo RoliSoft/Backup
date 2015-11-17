@@ -4,14 +4,16 @@
 
 # global variables
 btype="full" # backup type
-force=0      # force backup regardless of change state
 crypt="gpg"  # encryption type
+force=0      # force backup regardless of change state
+simul=0      # dry run
+debug=0      # verbose mode
 
 gpg_keyid="F879E486B30172F92C5C28267646148D0A934BBC" # consult documentation for GPG's --recipient
 openssl_pass="env:OPENSSL_PWD" # consult documentation for OpenSSL's -pass
 
 # read options
-while getopts ":t:e:g:o:fh" opt; do
+while getopts ":t:e:g:o:fsvh" opt; do
 	case $opt in
 	t)
 		case $OPTARG in
@@ -53,8 +55,14 @@ while getopts ":t:e:g:o:fh" opt; do
 	f)
 		force=1
 	;;
+	s)
+		simul=1
+	;;
+	v)
+		debug=1
+	;;
 	h)
-		echo "usage: $0 [-f] [-t f|i] [-e n|g|o] [-g recipient] [-o password]"
+		echo "usage: $0 [-f] [-s] [-v] [-t f|i] [-e n|g|o] [-g recipient] [-o password]"
 		echo
 		echo "This is more of a DIY backup solution. For more info check the source."
 		exit 0
@@ -119,11 +127,26 @@ has_mods ()
 		IFS=' ' read -a cond <<< "$3"
 	fi
 	
-	ret=$(\
-			( cd "$2"; find . -type f "${cond[@]}" -newermt "$date" ! -newermt "now" ! -name 'desktop.ini' ! -name 'Thumbs.db' -print ) | \
-			( [[ -z "$3" ]] && grep -vFf "data/$1.exclude.txt" || cat ) | \
-			wc -l \
-		)
+	if [ $debug -ne 1 ]; then
+		ret=$(\
+				( cd "$2"; find . -type f "${cond[@]}" -newermt "$date" ! -newermt "now" ! -name 'desktop.ini' ! -name 'Thumbs.db' -print ) | \
+				( [[ -z "$3" ]] && grep -vFf "data/$1.exclude.txt" || cat ) | \
+				wc -l \
+			)
+	else
+		ret=$(\
+				( cd "$2"; find . -type f "${cond[@]}" -newermt "$date" ! -newermt "now" ! -name 'desktop.ini' ! -name 'Thumbs.db' -print ) | \
+				( [[ -z "$3" ]] && grep -vFf "data/$1.exclude.txt" || cat ) \
+			)
+		cnt=$(echo "$ret" | wc -l)
+		
+		if [[ $ret = *[!\ ]* ]] && [ $cnt -gt 0 ]; then
+			echo "$ret" | sed "s#^\.\/#file changed: $2/#"
+			ret=$cnt
+		else
+			ret=0
+		fi
+	fi
 	
 	# clean up
 	
@@ -240,14 +263,24 @@ backup ()
 	
 	if [ $force -eq 1 ]; then
 		do=1
+		
+		if [ $simul -eq 1 ]; then
+			echo $(ts) "would backup $1 due to force flag"
+		fi
 	else
 		has_mods "$1" "$2" "$3"
-		if [ $? -gt 0 ]; then
+		changed=$?
+		
+		if [ $changed -gt 0 ]; then
 			do=1
+			
+			if [ $simul -eq 1 ]; then
+				echo $(ts) "would backup $1 due to" $(plural $changed "changed file")
+			fi
 		fi
 	fi
 	
-	if [ $do -eq 1 ]; then
+	if [ $do -eq 1 ] && [ $simul -ne 1 ]; then
 		echo $(ts) "backing up $1..."
 		archive "$1" "$2" "$3"
 	fi
