@@ -119,10 +119,10 @@ has_mods ()
 	# read last backup date
 	date=$(cat "data/$1.lastdate.txt")
 	
-	if [ -z "$3" ]; then
-		# generate complementary git ignores, if not backing up through find
-		gen_git_ignores "$2" 0 > "data/$1.exclude.txt"
-	else
+	# generate complementary git ignores
+	gen_git_ignores "$2" 0 > "data/$1.exclude.txt"
+	
+	if [ ! -z "$3" ]; then
 		# parse find conditions into an array
 		IFS=' ' read -a cond <<< "$3"
 	fi
@@ -130,13 +130,13 @@ has_mods ()
 	if [ $debug -ne 1 ]; then
 		ret=$(\
 				( cd "$2"; find . -type f "${cond[@]}" -newermt "$date" ! -newermt "now" ! -name 'desktop.ini' ! -name 'Thumbs.db' -print ) | \
-				( [[ -z "$3" ]] && grep -vFf "data/$1.exclude.txt" || cat ) | \
+				grep -vFf "data/$1.exclude.txt" | \
 				wc -l \
 			)
 	else
 		ret=$(\
 				( cd "$2"; find . -type f "${cond[@]}" -newermt "$date" ! -newermt "now" ! -name 'desktop.ini' ! -name 'Thumbs.db' -print ) | \
-				( [[ -z "$3" ]] && grep -vFf "data/$1.exclude.txt" || cat ) \
+				grep -vFf "data/$1.exclude.txt" \
 			)
 		cnt=$(echo "$ret" | wc -l)
 		
@@ -150,9 +150,7 @@ has_mods ()
 	
 	# clean up
 	
-	if [ -z "$3" ]; then
-		rm -f "data/$1.exclude.txt"
-	fi
+	rm -f "data/$1.exclude.txt"
 	
 	return $ret
 }
@@ -176,11 +174,15 @@ archive ()
 {
 	date=$(date +"%Y-%m-%d_%H-%M")
 	
-	# generate complementary git ignores, if not listing via find
+	# generate complementary git ignores
 	
 	if [ -z "$3" ]; then
-		gen_git_ignores "$2" 1 > "data/$1.exclude.txt"
+		ignmode=1 # tar needs folders to end with /*
+	else
+		ignmode=0 # however find does not support globbing
 	fi
+	
+	gen_git_ignores "$2" $ignmode > "data/$1.exclude.txt"
 	
 	# compress files
 	
@@ -220,17 +222,20 @@ archive ()
 			nop)
 				# no encryption
 				( cd "$2"; find . -type f "${cond[@]}" "${cond2[@]}" ) | \
+				grep -vFf "data/$1.exclude.txt" | \
 				tar --ignore-failed-read --exclude-vcs-ignores --exclude-backups "${cond2[@]}" -cJf "temp/$1..$date.$btype.tar.xz" -C "$2" --no-recursion --files-from -
 			;;
 			gpg)
 				# encrypt with gpg
 				( cd "$2"; find . -type f "${cond[@]}" "${cond2[@]}" ) | \
+				grep -vFf "data/$1.exclude.txt" | \
 				tar --ignore-failed-read --exclude-vcs-ignores --exclude-backups -cJ -C "$2" --no-recursion --files-from - | \
 				gpg --encrypt --always-trust --recipient "$gpg_keyid" --output "temp/$1..$date.$btype.tar.xz.gpg" -
 			;;
 			osl)
 				# encrypt with openssl
 				( cd "$2"; find . -type f "${cond[@]}" "${cond2[@]}" ) | \
+				grep -vFf "data/$1.exclude.txt" | \
 				tar --ignore-failed-read --exclude-vcs-ignores --exclude-backups -cJ -C "$2" --no-recursion --files-from - | \
 				openssl aes-256-cbc -salt -out "temp/$1..$date.$btype.tar.xz.enc" -pass "$openssl_pass"
 			;;
@@ -251,9 +256,7 @@ archive ()
 	
 	# clean up
 	
-	if [ -z "$3" ]; then
-		rm -f "data/$1.exclude.txt"
-	fi
+	rm -f "data/$1.exclude.txt"
 }
 
 # tests whether a backup is needed and performs it
@@ -308,17 +311,17 @@ GenericVsProj='(ATL)?Project[0-9]+|(WindowsForms|Console|Wpf|Silverlight|Web)App
 # list of backups
 
 # backup stuff I throw on the desktop
-backup Desktop..euvps /cygdrive/c/Users/RoliSoft/Desktop/euvps
-backup Desktop..cloudflare /cygdrive/c/Users/RoliSoft/Desktop/cloudflare
-backup Desktop..backup /cygdrive/c/Users/RoliSoft/Desktop/backup
+#backup Desktop..euvps /cygdrive/c/Users/RoliSoft/Desktop/euvps
+#backup Desktop..cloudflare /cygdrive/c/Users/RoliSoft/Desktop/cloudflare
+#backup Desktop..backup /cygdrive/c/Users/RoliSoft/Desktop/backup
 backup Desktop..misc /cygdrive/c/Users/RoliSoft/Desktop "-size -50M ! -path ./backup* ! -path ./euvps* ! -path ./cloudflare* ! -path ./*-master*"
-backup Desktop..home /home
+#backup Desktop..home /home
 
 # backup visual studio projects
-for vsd in /cygdrive/c/Users/RoliSoft/Documents/Visual\ Studio*/Projects; do
-	backup_dev VisualStudio "$vsd" $GenericVsProj
-done
+#for vsd in /cygdrive/c/Users/RoliSoft/Documents/Visual\ Studio*/Projects; do
+#	backup_dev VisualStudio "$vsd" $GenericVsProj
+#done
 
 # backup php projects
-backup WebSites.._nginx /cygdrive/c/inetpub/server/bin/nginx/conf
-backup_dev WebSites /cygdrive/c/inetpub/wwwroot 'seriesprep|jobsite'
+#backup WebSites.._nginx /cygdrive/c/inetpub/server/bin/nginx/conf
+#backup_dev WebSites /cygdrive/c/inetpub/wwwroot 'seriesprep|jobsite'
